@@ -6,6 +6,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.ResourceServerProperties;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.UserInfoTokenServices;
+import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -30,6 +31,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.filter.CompositeFilter;
 
 import javax.servlet.Filter;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URL;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -57,12 +61,24 @@ public class JobsubApplication extends WebSecurityConfigurerAdapter {
     }
 
     @CrossOrigin
-    @RequestMapping(value = "/api/example", method = GET)
+    @RequestMapping(value = "/api/offers", method = GET)
     @ResponseBody
-    public String printJobFromRequestParam(@RequestParam("job") String job) {
+    public String returnJobsFromGithubJobs(@RequestParam("job") String job,
+                                           @RequestParam("city") String city,
+                                           @RequestParam("salary") String salary) {
 
         System.out.println("Job received from frontend:" + job);
-        return "Backend received job: " + job;
+        String githubJobsURLBasic = "https://jobs.github.com/positions.json?";
+
+        String githubJobsURLFull = githubJobsURLBasic.concat("description=" + job)
+                .concat("&location=" + city);
+        JSONArray jsonArray = null;
+        try {
+            jsonArray = getJSONArrayfromURLString(githubJobsURLFull);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return jsonArray.toString();
     }
 
     @Override
@@ -88,9 +104,9 @@ public class JobsubApplication extends WebSecurityConfigurerAdapter {
         }
     }
 
-    public static void main(String[] args){
+    public static void main(String[] args) {
         SpringApplication.run(JobsubApplication.class, args);
-}
+    }
 
     @Bean
     public FilterRegistrationBean<OAuth2ClientContextFilter> oauth2ClientFilterRegistration(OAuth2ClientContextFilter filter) {
@@ -130,6 +146,24 @@ public class JobsubApplication extends WebSecurityConfigurerAdapter {
         tokenServices.setRestTemplate(oAuth2RestTemplate);
         oAuth2ClientAuthenticationFilter.setTokenServices(tokenServices);
         return oAuth2ClientAuthenticationFilter;
+    }
+
+    private static JSONArray getJSONArrayfromURLString(String urlString) throws Exception {
+
+        URL url = new URL(urlString);
+        // open the url stream, wrap it an a few "readers"
+        BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()));
+
+        // write the output to stdout
+        String line;
+        JSONArray jsonArray = null;
+        if ((line = reader.readLine()) != null) {
+            jsonArray = new JSONArray(line);
+        }
+
+        // close our reader
+        reader.close();
+        return jsonArray;
     }
 }
 
