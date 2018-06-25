@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.ResourceServerProperties;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.UserInfoTokenServices;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
+import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -41,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.springframework.web.bind.annotation.RequestMethod.GET;
-import static org.springframework.web.bind.annotation.RequestMethod.POST;
 
 @SpringBootApplication
 @RestController
@@ -69,16 +69,56 @@ public class JobsubApplication extends WebSecurityConfigurerAdapter {
 
         System.out.println("Job received from frontend:" + job);
         String githubJobsURLBasic = "https://jobs.github.com/positions.json?";
-
-        String githubJobsURLFull = githubJobsURLBasic.concat("description=" + job)
+        String githubJobsURLFull = githubJobsURLBasic.concat("description=" + job.split(" ")[0])
                 .concat("&location=" + city);
-        JSONArray jsonArray = null;
+
+        String searchGovURLBasic = "https://jobs.search.gov/jobs/search.json?size=50&";
+        String searchGovURLFull = searchGovURLBasic.concat("query=" + job.replace(" ", "+") + "+in+" + city);
+        JSONArray githubJobsJsonArray = null;
+        JSONArray searchGovJsonArray = null;
         try {
-            jsonArray = getJSONArrayfromURLString(githubJobsURLFull);
+            githubJobsJsonArray = getJSONArrayfromURLString(githubJobsURLFull);
+            searchGovJsonArray = getJSONArrayfromURLString(searchGovURLFull);
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return jsonArray.toString();
+
+        for (int i = 0; i < githubJobsJsonArray.length(); i++) {
+            try {
+                githubJobsJsonArray.getJSONObject(i).remove("company");
+                githubJobsJsonArray.getJSONObject(i).remove("company_url");
+                githubJobsJsonArray.getJSONObject(i).remove("how_to_apply");
+                githubJobsJsonArray.getJSONObject(i).remove("company_logo");
+                githubJobsJsonArray.getJSONObject(i).remove("created_at");
+                githubJobsJsonArray.getJSONObject(i).remove("id");
+                githubJobsJsonArray.getJSONObject(i).remove("type");
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        for (int i = 0; i < searchGovJsonArray.length(); i++) {
+            try {
+                searchGovJsonArray.getJSONObject(i).remove("end_date");
+                searchGovJsonArray.getJSONObject(i).remove("start_date");
+                searchGovJsonArray.getJSONObject(i).remove("maximum");
+                searchGovJsonArray.getJSONObject(i).remove("minimum");
+                searchGovJsonArray.getJSONObject(i).remove("rate_interval_code");
+                searchGovJsonArray.getJSONObject(i).remove("id");
+                String location = searchGovJsonArray.getJSONObject(i).get("locations").toString()
+                        .replaceAll("\\[", "").replaceAll("]", "");
+                searchGovJsonArray.getJSONObject(i).remove("locations");
+                searchGovJsonArray.getJSONObject(i).put("location", location);
+
+                String title = searchGovJsonArray.getJSONObject(i).get("position_title").toString();
+                searchGovJsonArray.getJSONObject(i).remove("position_title");
+                searchGovJsonArray.getJSONObject(i).put("title", title);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+        return githubJobsJsonArray.toString().replaceFirst("]", ", ")
+                + searchGovJsonArray.toString().replaceFirst("\\[", "");
     }
 
     @Override
